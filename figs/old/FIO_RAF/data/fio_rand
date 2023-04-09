@@ -1,0 +1,6 @@
+#type,DFTL,SFTL,TPFTL,HashFTL,BloomFTL
+RW+SR,1,1,2,1,1
+RW+RR,1.68,1.69,1.98,1,1
+RW+Mix,1.69,1.69,1.98,1,1
+
+

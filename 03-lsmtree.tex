@@ -1,0 +1,308 @@
+\setlength{\tabcolsep}{0.7em}
+{\renewcommand{\arraystretch}{0.6}
+\begin{table}[t]
+\footnotesize
+\centering
+\caption{A comparison of RAFs of index structures}
+\begin{tabular}{|l||l|l|}
+\hline
+\multicolumn{1}{|c||}{\textbf{Indexing technique}}    & \multicolumn{1}{c|}{\textbf{RAF}}\\ \hline \hline
+Hybrid                 & $1$                    \\ \hline
+Demand-based           & $1+\alpha_{miss}$    \\ \hline
+Tree-based             & $1+h\times \alpha_{miss}$\\ \hline
+LSM-tree               & $1+h\times r \times log_{2}(m)\times \alpha_{miss} $\\ \hline
+LSM-tree+BF+PLR & {$1 +(1+(h \times r-1)\times BF_{fpr}) \times 1 \times \alpha_{miss}$} \\ \hline
+\ours{}                & $1+\mathcal{E}$\\ \hline
+\end{tabular}
+\label{tab:raf-cost}
+\vspace{5pt}
+\end{table}
+}
+
+
+\section{LSM-tree: Opportunities and Challenges}
+
+Existing index structures for SSDs fail to provide consistent performance,
+showing skewed or highly fluctuated performance.
+%Therefore, it is crucial to devise a new index structure that is able to
+%provide consistent and balanced performance, regardless of workloads and
+%system's condition, while consuming less DRAM.
+%as  that could replace the
+%existing index structures,
+An LSM-tree may be considered to be a viable alternative.
+An LSM-tree is a sorted multi-level search tree
+where all data including metadata is always appended to the storage.  This
+property is suitable for NAND flash.  
+
+An LSM-tree is widely used to implement key-value (KV) 
+stores~\cite{leveldb, rocksdb}.
+Recently, there have attempts to use a variant of LSM-trees for SSDs
+(\eg~iLSM~\cite{ilsm} and PinK~\cite{pink}).  
+These approaches, however, aim to
+offload a KV store engine onto an SSD to accelerate KV clients.  
+GeckoFTL~\cite{geckoFTL} exploits an LSM-tree to mitigate 
+the memory overhead of managing validity bitmaps for flash pages. 
+However, it does not consider using an LSM-tree as an index structure.
+To the best of
+our knowledge, using an LSM-tree for indexing logical blocks to physical
+sectors is not studied before.  In this section, we present how the LSM-tree
+can be used for L2P indexing, presenting its opportunities and
+challenges.
+
+\begin{comment}
+\begin{figure}[t]
+\centering
+\includegraphics[width=0.37\textwidth]{figs/OSDI/koo/lsm.eps}
+\vspace{-10pt}
+\caption{\fixme{LSM-tree indexing}}
+\vspace{-15pt}
+\label{fig:LSM-tree}
+\end{figure}
+\end{comment}
+
+
+\subsection{LSM-tree for L2P Indexing}
+\label{sec:back:lsm-tree}
+%The LSM-tree is a sorted multi-level search tree that is widely to implement
+%key-value (KV) stores~\cite{leveldb, rocksdb}.  
+\FIG{fig:ftl-review}(c) is the organization of an LSM-tree.  An LSM-tree has
+multiple levels, $L_0$, ..., $L_{h-1}$, where $h$ is a tree height.  Levels are
+organized so that $L_{i+1}$ is $T$ times larger than $L_{i}$, where $T$ is a
+size factor. Each level is also divided into multiple sorted runs, and each run
+stores KV pairs sorted by keys over physically continuous storage space.  A run
+keeps unique KV pairs, but the key range of one run may overlap with those of
+other runs in any levels. The number $r$ of runs per level is the same, so a
+run at $L_{i+1}$ is $T$ times larger in size than that at $L_i$.
+%\FIG{fig:lsm_arch} shows the example of the LSM tree 
+%when $h$=\todo{4} and $N_{run}$=\todo{4}.
+
+In an LSM-tree, incoming KV pairs are buffered in a DRAM-resident memtable.
+When the memtable is full, it sorts buffered KV pairs and appends them to a new
+run at $L_0$ that resides in the storage.  KV pairs of $L_0$ are flushed out to
+a run in $L_1$ when $L_0$ is full.  Similarly, once $L_i$ is full, $L_i$ is
+written to $L_{i+1}$.  When flushing out $L_i$ to $L_{i+1}$, an LSM-tree
+performs compaction that merges and sorts KV pairs to maintain the sorted tree.
+The compaction process is simple; an LSM-tree reads in KV pairs from all the
+runs at $L_i$, sorts them by key, and writes the sorted ones back to $L_{i+1}$,
+creating a new sorted run at $L_{i+1}$ (see \FIG{fig:ftl-review}(c)).
+
+An LSM-tree can be used for L2P indexing by treating an LBA
+as a key and a 4KB block as a value.  For each sorted run, its metadata
+is stored as a header (or a footer).  The metadata is written
+together with run's data and contains L2P indices 
+that point to locations of sectors for LBAs in the run.
+
+\textbf{Opportunities.}
+An LSM-tree gives us two unique opportunities.
+First, an LSM-tree does not suffer from the wandering tree problem.
+The change of metadata in one run does not lead 
+to the updates of metadata in the other runs.
+This is because of the immutability of an LSM-tree that
+appends new data and metadata to the flash, 
+leaving previous versions unchanged.
+
+Second, the sorted nature of an LSM-tree makes it invulnerable
+to fragmentation. Through compaction, an LSM-tree sorts
+logical blocks by their LBAs and appends them 
+to physically consecutive sectors. 
+Each run thus has a regular pattern of <LBA,PSA> pairs,
+where both LBA and PSA monotonically increase.
+This property enables us to build 
+memory-efficient approximate indices over the tree, without
+sacrificing lookup latency.
+We discuss this in detail in \SEC{sec:design:fp}--\SEC{sec:design:plr-basic}
+
+
+\textbf{Challenges.}
+An LSM-tree also has inherent drawbacks.  The first is high RAF.  As explained
+before, tree runs have overlapped key ranges.  Given a read query (see
+\texttt{read(513)} in \FIG{fig:ftl-review}(c)), starting from $L_0$, we have to look
+up a run to see if it has the desired data.  If no matched entry is found, we
+move on to the next run and repeat the above steps.  To serve a read query, we
+have to visit up to $h \times r$ runs (\eg~16 runs in \FIG{fig:ftl-review}(c)).
+Looking up each run to find desired data involves many I/Os because we have to
+perform binary search over the run's metadata.  Assuming the metadata is stored
+over $m$ sectors, $log_{2}(m)$ reads are needed.  Caching popular sectors of the
+metadata relieves the problem, but its effectiveness depends 
+on a miss ratio $\alpha_{miss}$.
+Thus, the RAF of an LSM-tree can be expressed as follow: 
+RAF = $1 + h \times r
+\times log_{2}(m) \times \alpha_{miss}$.
+As a result, an LSM-tree has much higher RAF than 
+the existing index structures.
+
+Another problem is high WAF due to compaction. As explained earlier, when
+$L_{i}$ is filled with data, all the runs in $L_{i}$ must be flushed out to
+$L_{i+1}$. This implies that once data is written to $L_0$, it is likely to
+move from $L_0$ to $L_{h-1}$ unless it is removed or updated.  Consequently,
+the WAF of an LSM-tree is proportion to $h$, WAF = $h$. Note that 
+by organizing on a tree hierarchy, we can make a tree taller or fatter,
+adjusting its WAF~\cite{monkey}. 
+This gives us a chance to tune a tree so that 
+%If a tree is organized to have
+%few levels, it 
+it has comparable WAF to the existing index structures
+(see~\SEC{sec:design:tree}).
+
+\subsection{Lookup Optimization}
+\label{sec:back:bf}
+
+The read amplification is a well-recognized problem in LSM-trees. To address
+this, state-of-the-art LSM-trees employ Bloom filters~\cite{bloomfilter} and
+piecewise linear regression~\cite{plr1,plr2,plr3}.
+
+\textbf{Bloom Filters.}
+A Bloom filter (BF) is a space-efficient data structure used to test the
+existence of an item in a set~\cite{bloomfilter}. A BF is an approximate
+algorithm that may return false positive results.  
+An LSM-tree uses BFs~\cite{blsm, monkey, rocksdb, pebblesdb, dostoevsky} 
+to avoid useless lookups on runs 
+that do not have desired data.  BFs are stored as part of
+run's metadata (see \FIG{fig:ftl-review}(c)), but are normally cached in DRAM for
+fast lookup.  When a read comes, an LSM-tree performs membership tests
+over BFs to see if desired data is stored in the run.  
+If the BFs return a negative result, 
+an LSM-tree moves to the next run without looking up the run.
+Otherwise, it performs binary search while reading the run's metadata.
+If the result turns out to be false positive, 
+however, an LSM-tree keeps searching the 
+tree from the next run. With BFs, $h \times r$ reduces
+to $1 + (h \times r-1)\times BF_{fpr}$, where $BF_{fpr}$ is a false posive 
+rate of BFs ($0<BF_{fpr}<1$) (see \TAB{tab:raf-cost}). Be advised that at least 
+one run should be searched even if an LSM-tree adopts BFs.
+
+
+
+
+\textbf{Piecewise Linear Regression.}
+Piecewise linear regression (PLR) is a method that performs regression analysis
+between independent $x$ and dependent $y$ variables. It breaks a dataset into
+line segments and models each segment using a linear equation: $y=ax+b$.
+PLR is used to predict the position $y_{\rho}$ of a record in a dataset, so
+that $y_{\rho}$ lies within an error bound $\delta$, $|y - y_{\rho}| \leq
+\delta$~\cite{plr2, plr1, plr3}.
+Some recent studies~\cite{learned-index, alex-plr, bourbon} 
+exploit this property 
+of PLR to reduce search overheads of tree structures (\eg~{B+tree and LSM-tree}).
+
+Bourbon~\cite{bourbon} shows that PLR is useful to make lookups
+faster in LSM-trees.  
+Similar to BFs, an LSM-tree stores PLR models on run's metadata, but
+keeps them in DRAM for performance.  Given a read query, an LSM-tree first
+estimates an approximate position of metadata in a run using PLR, and
+then does binary search within a much narrower range.  
+This reduces not only
+lookup complexity but I/Os because only part of the metadata needs to be read.
+If a metadata search range suggested by PLR 
+is limited within a single sector, 
+$log_{2}(m)$ reduces to 1 (see~\TAB{tab:raf-cost}).
+%Rebuilding PLR models is relatively expensive.  But, the layout of the
+%LSM-tree changes occasionally when compaction is triggered.  Once built,
+%PLR models can be used for a long time without rebuilding.
+
+\begin{comment}
+BF and PLR are effective in reducing RAF.  With BFs, $r \times h$ reduces to
+1 + ($r \times h \times BF_{fpr}$), where $BF_{fpr}$ is a false positive rate of BFs
+($0<BF_{fpr}<1$).  When PLR is combined, the number of I/Os to fetch run's
+metadata reduces greatly, along with lookup complexity. \polish{If a search
+range suggested by PLR fits in a single sector}, $log_{2}(m)$ reduces to 1.  The
+new RAF is thus as follow: RAF = $1 + ( h \times r \times BF_{fpr} \times 1) \times (1 -
+\alpha_{hit})$.
+\end{comment}
+
+Through optimization with BFs and PLR, 
+an LSM-tree has a reduced RAF 
+= $1 + (1 + (h \times r -1) \times BF_{fpr}) \times 1 \times \alpha_{miss}$.
+BFs and PLR, however, are complement data structures; run's metadata is still
+needed and referenced in the read path to know a location of queried data.
+The number of extra reads to fetch the metadata is decided by a
+cache miss ratio.  Even worse,
+an LSM-tree has to use a large BF to minimize a false positive rate.  
+Similarly, to minimize approximation errors, 
+we have to use a large PLR model.
+While BF and PLR themselves are memory efficient, they consume non-trivial
+amounts of DRAM which can be used to cache run's metadata.
+This, in turn, exacerbates the memory pressure.
+%As a result, even though BFs and PLR models alleviate the read
+%amplification problems of LSM-trees, they exacerbate the memory pressure.
+
+
+
+
+
+
+\begin{comment}
+The read amplification is a well-recognized problem in LSM-trees.  
+To address this,
+state-of-the-art LSM-trees employ approximate techniques, bloom filters~\cite{bloomfilter} and 
+piecewise linear regression~\cite{plr1,plr2,plr3}.  We explain
+how LSM-trees use them to speed up read queries and present their
+limitations in terms of memory usage.
+
+\textbf{Bloom filter.}
+A bloom filter (BF) is a space-efficient data structure used to test the
+existence of an item in a set~\cite{bloomfilter}. A BF is an approximate
+algorithm that may return \textit{false positive} results.  A BF is
+organized as a $m$-bit array that is initially 0.  When a new element is
+added to the set, the BF sets bit positions of the element in the $m$-bit
+array using $k$ hash functions.  To query for an element in the set, the BF
+computes bit positions using the same hash functions and sees if the
+corresponding bits are all set to 1. If it is, the queried element \textit{may}
+exist in the set. If any of the bits are 0, the element was not added before.
+A false positive result occurs when a queried element has bit positions that
+were set by different elements.  Given the same number of items, a
+\textit{false positive rate} (FPR) of a BF is decided by (\textit{i}) the
+number $k$ of hash functions and (\textit{ii}) the size $m$ of a bit array. By
+increasing $k$, $m$, or both, an FPR is lowered in general, but it needs
+more computation and memory. 
+
+The LSM-tree uses BFs~\cite{blsm, monkey, rocksdb, pebblesdb} to avoid useless
+lookups on runs that do not have a desired KV pair.  The LSM-tree creates BFs
+for KV pairs in a run when the run is created during compaction.  The created
+BFs are stored as part of the run's metadata (see \FIG{fig:lsm_arch}) but are
+normally cached in DRAM for fast lookup.  When a read query comes, the LSM-tree
+performs membership tests over the BFs of a target run to see if the desired KV
+pair is stored in the run.  If the BFs return a negative result, the LSM-tree
+moves on to the next run.  It is unnecessary to read large index tables and to
+perform a binary search as the BFs guarantee that no such a KV pair exists.  If
+the BFs return a positive result, it exhaustively searches the run after
+reading an index table.  If it turns out be false positive, however, the LSM-tree
+keeps searching the KV pair from the next run. 
+
+\textbf{Piecewise linear regression.}
+Piecewise linear regression (PLR) is a method that performs regression analysis
+between independent $x$ and dependent $y$ variables. It breaks a dataset into
+line segments and models each segment using a linear equation: $y=ax+b$. The
+PLR is used to predict the position $y_{\rho}$ of a record in a dataset, so
+that $y_{\rho}$ lies within an error bound $\delta$, $|y - y_{\rho}| \leq
+\delta$~\cite{plr2}.  The PLR is known to be a memory- and compute-efficient
+indexing method, particularly when a dataset has regular
+patterns~\cite{bourbon,learned-index}.
+
+Bourbon~\cite{bourbon} shows that the PLR is useful to make tree lookups faster.
+Similar to BFs, the LSM-tree creates a PLR model for each run
+and keeps it on the run's metadata.  PLR models are also often cached in DRAM.
+Given a read query, the LSM-tree first estimates an approximate position of the
+KV pair in a run using PLR models, and then does binary search within a much
+narrower range.  This reduces not only lookup complexity but I/Os as only part
+of the index table needs to be read.  Rebuilding PLR models is relatively expensive.
+However, the layout of the LSM-tree changes occasionally only when compaction
+is triggered.  Once built, PLR models can be used for a long time without
+rebuilding.
+
+Both BFs and PLR are effective in reducing the number of lookups on runs and
+computation for binary search.  However, 
+BFs and PLR are complement
+data structures; huge index tables are still needed and referenced in the read
+path to know an exact location of a queried KV pair. 
+Even worse, 
+to minimize a false positive rate, LSM-trees
+use a large BF that needs 10-bit per KV pair~\cite{rocksdb}.  Similarly, to
+minimize approximation errors of PLR models, additional 13-bit per
+KV pair are needed.  While BFs and PLR are memory efficient, they
+consume non-trivial amounts of DRAM. As a result, even though BFs and PLR models
+alleviate the
+read amplification problems of LSM-trees, they
+exacerbate the memory pressure.
+\end{comment}
+

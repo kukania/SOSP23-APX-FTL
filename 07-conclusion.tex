@@ -1,0 +1,68 @@
+
+%\vspace{-10pt}
+\section{Conclusion}
+\label{sec:con}
+
+This paper presented the approximate indexing technique
+based on FP and PLR for ultra-scale SSDs.  
+By utilizing the memory-efficient property 
+of these two algorithms, we designed \ours{}
+that guaranteed RAF under 1.1 while only using
+29.1\% of DRAM over the optimal FTL that loads its index table
+entirely in DRAM.
+Our results showed that \ours{} outperformed the demand-based indexing
+on read latency as well as throughput. In realistic benchmarks,
+\ours{} showed short read latency 
+close to that of the optimal FTL.
+The overall throughput of \ours{} was 32\% higher than 
+the demand-based indexing, on average.
+%Overall, \ours{} offered \JS{45\%} shorter latency and 
+%\JS{20\%} higher throughput than demand-based FTLs, on average.
+As future work, we plan to optimize the memory usage of the shortcut table 
+that accounts for the majority of DRAM usage.
+
+\begin{comment}
+In write performance, \ours{} performs 20\% lower WAS in average than other 
+demand-based FTLs on realistic benchmarks. But, it shows lower 
+write throughput (up to 21\% lower) on random write workloads.
+\end{comment}
+
+\begin{comment}
+In this paper, we proposed a new probability-based address translation
+algorithm, \ours{}, which was based on bloom filters.  Compared to the
+sector-level FTL that maintains all the mapping entries in DRAM, \ours{}
+required only 21\% of DRAM, but guaranteed a low enough RAF which was less than
+1.1. 
+\ours{} offered a slightly higher WAF than other FTLs, but it was
+regulated under 3.0.  As future work, we plan to optimize the Reblooming
+process to minimize its overhead, implement HW accelerator for membership
+tests, and carry out comprehensive experiments using real-world workloads.
+\end{comment}
+%\vspace{-10pt}
+%\section*{Acknowledgements}
+%HiSilicon Technologies Co., Ltd. supported this research.  This study was also
+%supported by the NRF grant funded by the Korea government (Ministry of Science
+%and ICT) (NRF-2018R1A5A1060031). 
+\begin{comment}
+    
+
+{
+\renewcommand{\arraystretch}{0.4}
+\begin{table*}[t]
+    \small
+    \caption{\fixme{RAF, Lookup and WAF cost of algorithms}}
+    \vspace{-10pt}
+    \centering
+    \begin{tabular}{|c||c|c|c|}
+        \hline
+        {FTL} &  {RAF}  & {Lookup}  & {WAF (simulation?)}  \\\hline
+        {Hybrid} & {1}  & {$O(n_{log})$} & {$(1-a_{hit,log})\cdot SPB \cdot \frac{1}{blocknum} \cdot SPB$} \\\hline
+        {$\mu$FTL} & {$1+\sum_{i=1}^{h}\cdot(1-\alpha_{hit,i})$} & {$O(h\cdot log_{2}(n_{entry}))$} & {$1+\alpha_{dirty-evict}\cdot SPP$} \\\hline
+        {DFTL} & {$1+(1-\alpha_{hit})$} & {O(1)} & {$1+\alpha_{dirty-evict}\cdot 2 \cdot SPP$} \\\hline
+        {LSM-tree} & {$r\cdot h \cdot FPR \cdot \alpha_{hit}$} & {$O(r\cdot h \cdot log_2(n_{run-entry}))$} & {$h$}\\\hline
+        \end{tabular}
+    \label{tab:plr-opt}
+    \vspace{-10pt}
+\end{table*}
+}
+\end{comment}

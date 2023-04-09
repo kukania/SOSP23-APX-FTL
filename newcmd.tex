@@ -1,0 +1,93 @@
+\newcommand{\PSA}[1]{\textit{y$_{#1}$}} % should be fixed later
+\newcommand{\LBA}[1]{\textit{x$_{#1}$}} % should be fixed later
+\newcommand{\BF}[1]{\textit{BF$_{#1}$}} % should be fixed later
+\newcommand{\FP}[1]{\textit{FP$_{#1}$}} % should be fixed later
+
+%\newcommand*{\ov}[1]{%
+  %$\m@th\overline{\mbox{#1}}$%
+%}
+
+%\DeclareRobustCommand{\coverline}[1]{% clever overline
+  %\binrel@{#1}\binrel@@{\overline{#1}}%
+%}
+
+\newcommand{\maxslp}[1]{\overline{slp}} % should be fixed later
+\newcommand{\minslp}[1]{\underline{slp}} % should be fixed later
+
+\usepackage{color}
+\usepackage{xcolor}
+
+\newcommand{\cancel}[1]{{\color{red}\sout{#1}}}
+
+\newcommand{\REVISE}[1]{{\color{blue}{#1}}} % REVIEW is necessary later
+\newcommand{\revise}[1]{{\color{blue}{#1}}} % REVIEW is necessary later
+\newcommand{\POLISH}[1]{{\color{blue}{#1}}} % REVIEW is necessary later
+\newcommand{\polish}[1]{{\color{blue}{#1}}} % REVIEW is necessary later
+\newcommand{\FIXME}[1]{{\color{red}{#1}}} % should be fixed later
+\newcommand{\fixme}[1]{{\color{red}{#1}}} % should be fixed later
+\newcommand{\TODO}[1]{{\color{purple}{(#1)}}} % TODO
+\newcommand{\todo}[1]{{\color{purple}{#1}}} % TODO
+\newcommand{\old}[1]{{\color{gray}{#1}}} % TODO
+%\newcommand{\eg}{\textit{e.g.,}}
+%\newcommand{\etal}{\textit{et al.}}
+%\newcommand{\ie}{\textit{i.e.,}}
+\newcommand{\reduce}[1]{{\color{purple}{#1}}} % REVIEW is necessary later
+\newcommand{\eg}{e.g.,}
+\newcommand{\etal}{et al.}
+\newcommand{\ie}{i.e.,}
+
+\newcommand{\koo}[1]{{\color{green}{#1}}} % REVIEW is necessary later
+\newcommand{\KOO}[1]{{\color{green}{#1}}} % REVIEW is necessary later
+\newcommand{\JS}[1]{{\color{teal}{#1}}} % REVIEW is necessary later
+\newcommand{\JH}[1]{{\color{orange}{#1}}} % REVIEW is necessary later
+\newcommand{\OSG}[1]{{\color{blue}{#1}}} % REVIEW is necessary later
+\newcommand{\hs}[1]{{\color{orange}{#1}}}
+
+\newcommand{\SECTOR}[1]{{\texttt{SECTOR}{#1}}} % REVIEW is necessary later
+\newcommand{\OPT}[1]{{\texttt{OPT}{#1}}} % REVIEW is necessary later
+\newcommand{\DFTL}[1]{{\texttt{DFTL}{#1}}} % REVIEW is necessary later
+\newcommand{\SFTL}[1]{{\texttt{SFTL}{#1}}} % REVIEW is necessary later
+\newcommand{\TPFTL}[1]{{\texttt{TPFTL}{#1}}} % REVIEW is necessary later
+\newcommand{\OURS}[1]{{\texttt{AppLSM}{#1}}} % REVIEW is necessary later
+
+\newcommand{\ours}{AppLSM}
+\newcommand{\ourftl}{AppLSM}
+\newcommand{\ourtree}{AppLSM}
+
+\newcommand{\SEC}[1]{$\S$\ref{#1}}
+\newcommand{\FIG}[1]{Fig.~\ref{#1}}
+\newcommand{\FIGS}[1]{Figs.~\ref{#1}}
+\newcommand{\TAB}[1]{Table~\ref{#1}}
+\newcommand{\EQ}[1]{Eq.~(\ref{#1})}
+
+\usepackage{mathtools}
+\DeclarePairedDelimiter\ceil{\lceil}{\rceil}
+\DeclarePairedDelimiter\floor{\lfloor}{\rfloor}
+
+%\usepackage{fontspec}
+%\usepackage{libertine}
+
+\usepackage{tikz}
+
+\newcommand{\wcircled}[1]{
+    \setbox0=\hbox{#1}%
+    \dimen0\wd0%
+    \divide\dimen0 by 2%
+    \begin{tikzpicture}[baseline=(a.base)]%
+        \useasboundingbox (-\the\dimen0,0pt) rectangle (\the\dimen0,1pt);
+        \node[color=black!50!black,circle,draw,outer sep=0pt,inner sep=0.05ex] (a) {#1};
+    \end{tikzpicture}
+}
+
+\newcommand{\bcircled}[1]{
+    \setbox0=\hbox{#1}%
+    \dimen0\wd0%
+    \divide\dimen0 by 2%
+    \begin{tikzpicture}[baseline=(a.base)]%
+        \useasboundingbox (-\the\dimen0,0pt) rectangle (\the\dimen0,1pt);
+		\node[fill=black!100,circle,text=white,outer sep=0pt,inner sep=0.05ex] (a) {#1};
+    \end{tikzpicture}
+}
+
+\captionsetup[figure]{name={Fig.},labelsep=period}
+

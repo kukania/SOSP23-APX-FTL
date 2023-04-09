@@ -1,0 +1,225 @@
+\section{Design Principles of \ours{}}
+\label{sec:overall}
+\ours{} is designed to overcome the limitations of LSM-trees,
+providing consistent and balanced I/O performance with minimum DRAM usage.
+To achieve this goal, we develop 
+\ours{} by keeping the following design principles in mind.
+
+\begin{itemize}[leftmargin=*]
+%\begin{itemize}[noitemsep,topsep=-0pt,leftmargin=*]
+\item \textbf{Using Direct Indices rather than Bloom Filters.}
+\ours{} does not rely on Bloom filters to decide whether to visit a specific
+run or not.  Instead, it maintains a direct index table, called a
+\textit{shortcut table}, which directly maps an LBA to a designated run.  The
+rationale behind this decision is due to the fact that direct indices are faster
+and more memory-efficient.  In our setting, a key is an integer in a specific
+range (\eg~$0\sim N-1$) and its value is a 4KB block. Thus, the number of logical
+blocks to be indexed is fixed. Moreover, the number of runs where
+LBAs are mapped is small.  If there exist 29 runs in the tree, only 5-bit per
+index is needed.  Bloom filters are useful in a situation where direct indices
+cannot be used -- that is, input keys have diverse types (\eg~strings) and the
+number of items to index is not fixed owing to a variable value size.  If we
+construct Bloom filters using the same memory needed to build a direct table,
+its false positive rate (FPR) is about 0.091. Using a direct table is reasonable, 
+considering its FPR is always 0.
+%the number of unnecessary visits
+%to runs becomes 0, that is $1 + (r \times h \times BF_{fpr})$ reduces to 1.
+%small. By using a shortcut table, $r$$\times$$h$ becomes 1.
+
+%\item \textbf{Principle \#2 -- No exact indices}:
+\item \textbf{Guessing rather than Caching}.
+%An LSM-tree keeps exact indices in its metadata which \textit{exactly} point to
+%physical sectors for logical blocks and, for performance, it caches some of
+%them.  For this reason, 
+An LSM-tree caches popular metadata of runs in DRAM,
+so its performance is highly dependent upon a cache miss
+ratio.  
+\ours{} takes a different approach; it only uses approximate indices to
+\textit{guess} locations of data in runs over its read path.  Compared to exact indices
+that need 32-bit per entry (for 16TB SSDs), approximate indices require
+3.8$\sim$7.86-bit per entry.  This space efficiency makes it possible
+to keep entire
+indices in DRAM without relying on caching.  Approximate indices inevitably
+result in errors that may involve extra I/Os.
+%Resolving such errors may involve lots of I/Os.
+%\ours{} address this problem by exploiting the property of approximate algorithms
+%that guarantees a target error rate. 
+%Taking an example of
+%one specific design point, \ours{} ensures the error rate of 0.1 (\ie~one 
+%error out of 10 queries) while achieving 3.43$\times$ memory efficiency.
+However, if an error rate $\mathcal{E}$ is controlled sufficiently low,
+approximation is a better choice.  
+The performance of caching is affected by
+various factors we cannot control, such as I/O locality and fragmentation.
+On the other hand, only the factor that decides the performance of
+approximation is an error rate 
+which can be preset at the design time.  This
+enables us to provide consistent I/O latency, regardless of input workloads and
+system's condition.
+
+%which cause extra reads while servicing user I/Os. The key technical issue is
+%thus how to accurately estimate a physical location of an input query.  an
+%input query while assigning minimal DRAM to approximate algorithms. To this To
+%this end, \ours{} employs a \textit{tiered indexing structure} that combines
+%exact indexing, BFs, and PLR models at different tree levels.  at different
+%tree levels in a manner that minimize both error rates and memory usage.  Our
+%indexing structure is Motivated by the fact that BFs and PLR models enable us
+%to set a specific error rate, trading accuracy against memory usage, we
+%carefully design BFs and PLRs to guarantee a target error rate with minimal
+%DRAM usage. 
+
+\begin{comment}
+Our goal is to use approximate algorithms to eliminate the \textit{necessity}
+of index tables in its read path.  \ours{} employs only two lightweight
+approximate data structures, BFs and PLR models, in DRAM and uses them to
+locate a physical sector of data to access.  No index tables are needed to find
+a location of data. By keeping only memory-efficient data structures in the
+memory, \ours{} can greatly reduce the amount of DRAM for the address
+translation.
+
+The approximate indexing of \ours{} inevitably results in trial errors which
+cause extra reads while servicing user I/Os. The key technical issue is thus
+how to accurately estimate a physical location of an input query.
+%an input query while assigning minimal DRAM to approximate algorithms. To this
+%To this end, \ours{} employs a \textit{tiered indexing structure} that
+%combines exact indexing, BFs, and PLR models at different tree levels.  at
+%different tree levels in a manner that minimize both error rates and memory
+%usage.  Our indexing structure is 
+Motivated by the fact that BFs and PLR models enable us to set a specific error
+rate, trading accuracy against memory usage, we carefully design BFs and PLRs
+to guarantee a target error rate with minimal DRAM usage. Taking an example of
+one specific design point, \ours{} ensures the error rate of 0.1 (\ie~one error
+out of 10 queries) while consuming 3.43$\times$ less DRAM than typical FTL
+designs.
+\end{comment}
+
+%\item \textbf{Principle \#3 -- No caching}:
+\item \textbf{Balancing Tree for Balanced Performance.}
+The WAF of an LSM-tree is decided 
+by adjusting a tree height $h$ as pointed out in \SEC{sec:back:lsm-tree}.
+However, reorganizing a tree hierarchy also has impacts on RAF and memory consumption.
+%As explained in \SEC{todo}, we are able to adjust write throughput by
+%adjusting the height of the tree. Reorganizing the tree, however, has
+%an impact on memory usages and RAF. 
+While taking into account such impacts,
+we carefully adjust the organization of a tree
+for \ours{} to provide reasonable WAF.
+\ours{} provides similar or slightly higher WAFs
+than the existing index structures. This does not
+diminish the value of \ours{}. Prioritizing reads is reasonable
+as they have a higher impact on user-perceived
+performance. On the other hand, write throughput can be optimized in various
+ways, for example, write buffering~\cite{write-buffer}.
+\end{itemize}
+
+\begin{comment}
+\ours{} adjusts the organization of a tree to provide reasonable WAF.
+%reduces WAF of the tree by adjusting the organization of a tree, offering a 
+%sufficiently low WAF (see~\SEC{todo}). 
+Moreover, by combining SSD's cleaning and compaction and by optimizing compaction process
+to minimize amount of data to migrate, \ours{} further reduces 
+WAF. Depending on workloads, \ours{} provides similar or slightly higher WAFs
+than the existing index structures. This does not
+diminish the value of \ours{}. Optimizing reads first is reasonable
+because they have a higher impact on user-perceived
+performance. Write throughput can also be optimized in various
+ways via write buffering~\cite{write-buffer}, 
+write suspension/resume~\cite{suspension}, and
+so on.
+\end{comment}
+
+In summary, \ours{} eliminates unnecessary visits to runs 
+by using direct indices rather than Bloom filters. 
+Instead of caching metadata,
+\ours{} loads entire approximate indices in DRAM.
+By doing so, in \ours{}, $BF_{fpr}$ becomes zero,
+and a cache miss rate, $\alpha_{miss}$, is replaced with an approximation 
+error rate, $\mathcal{E}$. As a result,
+\ours{} has RAF = 1 + $\mathcal{E}$ ($0 < \mathcal{E} < 1.0$).
+Unless otherwise stated, our target $\mathcal{E}$ is set to 0.1.
+It means that \ours{} guarantees RAF of 1.1, which is close
+to that of when an entire L2P table is loaded in DRAM.
+
+\begin{comment}
+First, high RAF caused by looking up runs in the tree never occur
+in \ours{}. Instead, by looking up the shortcut table, \ours{} is able to 
+visit a target run without extra reads.
+Moreover, since all the indices are kept in the memory entirely,
+\ours{} is not 
+affected by various factors we cannot control, such as temporal and spatial
+locality of workloads and system conditions (\ie~fragmentation).
+%that provide quite diverse performance depending on given workloads
+On the contrary, the read latency of \ours{} is only decided by a preset error
+rate. Even under random I/O workloads running over severely fragmented space,
+the error rate of \ours{} is maintained at a target level. This property of
+\ours{} enables us to guarantee the expected performance all the time,
+regardless of input workloads and system conditions.
+\end{comment}
+
+\begin{comment}
+\begin{itemize}[leftmargin=*]
+\item \textbf{Principle \#4 -- Balancing the tree for balanced WAF}:
+High WAF caused by compaction is another drawback of the LSM-tree.  \ours{}
+reduces WAF of the tree by adjusting the organization of a tree, offering a 
+offering a sufficiently low WAF (see~\SEC{todo}). Moreover,
+by combining FTL's GC and compaction and by optimizing compaction process
+to minimize amount of data to migrate, \ours{} achieves comparable 
+WAF to other index structures. This does not
+diminish the value of \ours{} as reads have a higher impact on user-perceived
+performance. Write throughput of SSDs can also be optimized in various
+ways via write buffering~\cite{write-buffer}, 
+write suspension/resume~\cite{suspension}, and
+so on.
+\end{itemize}
+\end{comment}
+
+\begin{comment}
+\subsection{Basic Idea} 
+Typical LSM-trees using approximate algorithms aim to reduce the
+\textit{probability} of looking up exact indices in index tables. Our goal is
+to use approximate algorithms to eliminate the \textit{necessity} of index
+tables in its read path.
+\ours{} employs only two lightweight approximate data structures, BFs and PLR
+models, in DRAM and uses them to locate a physical sector of data to access. 
+No index tables are needed to find a location of data. By keeping only
+memory-efficient data structures in the memory, \ours{} can greatly reduce the
+amount of DRAM for the address translation.
+%DRAM and uses them to guess a physical location of data to access.  In this
+%way, \ours{} enables to load the entire data structures in smaller DRAM
+%(5$\times$ smaller than the typical FTL), avoiding costly I/Os to retrieve
+%exact indices while serving user requests.
+
+The approximate indexing of \ours{} inevitably results in trial errors which
+cause extra reads while servicing user I/Os. The key technical issue is thus
+how to accurately estimate a physical location of an input query.
+%an input query while assigning minimal DRAM to approximate algorithms. To this
+%To this end, \ours{} employs a \textit{tiered indexing structure} that
+%combines exact indexing, BFs, and PLR models at different tree levels.  at
+%different tree levels in a manner that minimize both error rates and memory
+%usage.  Our indexing structure is 
+Motivated by the fact that BFs and PLR models enable us to set a specific error
+rate, trading accuracy against memory usage, we carefully design BFs and PLRs
+to guarantee a target error rate with minimal DRAM usage. Taking an example of
+one specific design point, \ours{} ensures the error rate of 0.1 (\ie~one 
+error out of 10 queries) while consuming 3.43$\times$ less DRAM than typical FTL
+designs.
+
+Yet another important benefit of \ours{} that it can provide consistent
+latency. The read latency of existing FTL designs varies greatly and is
+affected by various factors we cannot control, such as temporal and spatial
+locality of workloads and system conditions (\ie~fragmentation).
+%that provide quite diverse performance depending on given workloads
+On the contrary, the read latency of \ours{} is only decided by a preset error
+rate. Even under random I/O workloads running over severely fragmented space,
+the error rate of \ours{} is maintained at a target level. This property of
+\ours{} enables us to guarantee the expected performance all the time,
+regardless of input workloads and system conditions.
+
+In the following sections, we first explain the overall design of \ours{},
+along with its operations (\SEC{design:overall}). Then, we present how our
+approximate algorithms work (\SEC{sec:design:bf-plr-basic}).
+%how \ours{} manages the LSM tree and handle basic I/O operations. Then, we
+%present how \ours{} (나머지 쓰고 나중에 쓰자...)}
+\end{comment}
+
+

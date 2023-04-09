@@ -1,0 +1,21 @@
+Thanks to the advance of device scaling technologies, an ultra-scale SSD 
+(\eg{} 32TB) is introduced. This rapid increase of SSD capacity comes
+at the cost of a huge index table (\eg{} 32GB) 
+to map logical blocks to physical sectors.
+%Instead of keeping such a huge table in DRAM,
+Many have proposed various caching strategies 
+to provide reasonable performance using small DRAM.
+But, they provide seriously deteriorated read latency if
+workloads have weak locality or when storage space is fragmented.  
+This paper proposes a novel approximate LSM-tree index structure,
+\textit{\ours{}}. 
+\ours{} uses an LSM-tree as an index structure
+and creates approximate indices over the tree.
+Instead of relying on caching, it loads tiny approximate
+indices (3--7-bit per index) entirely in DRAM and uses them to locate data.
+%By balancing a tree hierarchy, it also offers sufficiently high write throughput.
+\ours{} is never affected by locality and system's condition.
+Even under random read workloads running on severely fragmented storage space,
+\ours{} exhibits read latency close to when the entire index table is
+kept in large DRAM. This performance is achieved by using only 29.1\% of DRAM
+that the index table needs.

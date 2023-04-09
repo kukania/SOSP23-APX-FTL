@@ -1,0 +1,6 @@
+#type,Lookup Time(us)
+Naive,93
+Prefetch,25
+Hash,10
+Code Opt.,2.746
+HW,0.326
